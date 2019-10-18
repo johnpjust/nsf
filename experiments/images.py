@@ -1,15 +1,17 @@
 import os
 import time
-
+import matplotlib
+matplotlib.use('Agg')
 import numpy as np
 import scipy.misc
-import sacred
+# import sacred
 
 import torch
 from torch import nn
 
-from sacred import Experiment, observers
-from tensorboardX import SummaryWriter
+# from sacred import Experiment, observers
+# from tensorboardX import SummaryWriter
+import tensorflow as tf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -25,29 +27,30 @@ import utils
 import optim
 import nn as nn_
 
-import matplotlib
-matplotlib.use('Agg')
-
 import matplotlib.pyplot as plt
 
 # Capture job id on the cluster
-sacred.SETTINGS.HOST_INFO.CAPTURED_ENV.append('SLURM_JOB_ID')
+# sacred.SETTINGS.HOST_INFO.CAPTURED_ENV.append('SLURM_JOB_ID')
 
-runs_dir = os.path.join(utils.get_data_root(), 'runs/images')
-ex = Experiment('decomposition-flows-images')
+# runs_dir = os.path.join(r'C:\Users\justjo\PycharmProjects\nsf', 'runs/images')
+run_dir = os.path.join(r'C:\Users\justjo\PycharmProjects\nsf', 'runs/images')
 
-fso = observers.FileStorageObserver.create(runs_dir, priority=1)
+# ex = Experiment('decomposition-flows-images')
+
+# fso = observers.FileStorageObserver.create(runs_dir, priority=1)
 # I don't like how sacred names run folders.
-ex.observers.extend([fso, autils.NamingObserver(runs_dir, priority=2)])
+# ex.observers.extend([fso, autils.NamingObserver(runs_dir, priority=2)])
 
 # For num_workers > 0 and tensor datasets, bad things happen otherwise.
 torch.multiprocessing.set_start_method("spawn", force=True)
 
+# SummaryWriter = tf.summary.SummaryWriter
+
 # noinspection PyUnusedLocal
-@ex.config
-def config():
+# @ex.config
+class config():
     # Dataset
-    dataset = 'fashion-mnist'
+    dataset = 'cifar-10' # 'fashion-mnist'
     num_workers = 0
     valid_frac = 0.01
 
@@ -82,7 +85,7 @@ def config():
     dropout_prob = 0.
 
     # Optimization
-    batch_size = 256
+    batch_size = 10
     learning_rate = 5e-4
     cosine_annealing = True
     eta_min=0.
@@ -110,6 +113,7 @@ def config():
     num_samples = 64
     samples_per_row = 8
     num_reconstruct_batches = 10
+    seed = 0
 
 class ConvNet(nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels):
@@ -126,10 +130,17 @@ class ConvNet(nn.Module):
     def forward(self, inputs, context=None):
         return self.net.forward(inputs)
 
-@ex.capture
-def create_transform_step(num_channels,
-                          hidden_channels, actnorm, coupling_layer_type, spline_params,
-                          use_resnet, num_res_blocks, resnet_batchnorm, dropout_prob):
+# @ex.capture
+# def create_transform_step(num_channels, hidden_channels, actnorm, coupling_layer_type, spline_params,
+#                           use_resnet, num_res_blocks, resnet_batchnorm, dropout_prob):
+def create_transform_step(num_channels, hidden_channels):
+    actnorm = config.actnorm
+    coupling_layer_type = config.coupling_layer_type
+    spline_params = config.spline_params
+    use_resnet = config.use_resnet
+    num_res_blocks = config.num_res_blocks
+    resnet_batchnorm = config.resnet_batchnorm
+    dropout_prob = config.dropout_prob
     if use_resnet:
         def create_convnet(in_channels, out_channels):
             net = nn_.ConvResidualNet(in_channels=in_channels,
@@ -207,10 +218,19 @@ def create_transform_step(num_channels,
     return transforms.CompositeTransform(step_transforms)
 
 
-@ex.capture
-def create_transform(c, h, w,
-                     levels, hidden_channels, steps_per_level, alpha, num_bits, preprocessing,
-                     multi_scale):
+# @ex.capture
+# def create_transform(c, h, w,
+#                      levels, hidden_channels, steps_per_level, alpha, num_bits, preprocessing,
+#                      multi_scale):
+def create_transform(c, h, w, config):
+
+    levels = config.levels
+    hidden_channels = config.hidden_channels
+    steps_per_level = config.steps_per_level
+    alpha = config.alpha
+    num_bits = config.num_bits
+    preprocessing = config.preprocessing
+    multi_scale = config.multi_scale
     if not isinstance(hidden_channels, list):
         hidden_channels = [hidden_channels] * levels
 
@@ -277,33 +297,54 @@ def create_transform(c, h, w,
 
     return transforms.CompositeTransform([preprocess_transform, mct])
 
-@ex.capture
-def create_flow(c, h, w,
-                flow_checkpoint, _log):
+# @ex.capture
+# def create_flow(c, h, w,
+#                 flow_checkpoint, _log):
+def create_flow(c, h, w, config, flow_checkpoint=None):
     distribution = distributions.StandardNormal((c * h * w,))
-    transform = create_transform(c, h, w)
+    transform = create_transform(c, h, w, config=config)
 
     flow = flows.Flow(transform, distribution)
 
-    _log.info('There are {} trainable parameters in this model.'.format(
-        utils.get_num_parameters(flow)))
+    # _log.info('There are {} trainable parameters in this model.'.format(
+    #     utils.get_num_parameters(flow)))
+    print('There are {} trainable parameters in this model.'.format(utils.get_num_parameters(flow)))
 
     if flow_checkpoint is not None:
         flow.load_state_dict(torch.load(flow_checkpoint))
-        _log.info('Flow state loaded from {}'.format(flow_checkpoint))
+        # _log.info('Flow state loaded from {}'.format(flow_checkpoint))
+        print('Flow state loaded from {}'.format(flow_checkpoint))
 
     return flow
 
-@ex.capture
-def train_flow(flow, train_dataset, val_dataset, dataset_dims, device,
-               batch_size, num_steps, learning_rate, cosine_annealing, warmup_fraction,
-               temperatures, num_bits, num_workers, intervals, multi_gpu, actnorm,
-               optimizer_checkpoint, start_step, eta_min, _log):
-    run_dir = fso.dir
+# @ex.capture
+# def train_flow(flow, train_dataset, val_dataset, dataset_dims, device,
+#                batch_size, num_steps, learning_rate, cosine_annealing, warmup_fraction,
+#                temperatures, num_bits, num_workers, intervals, multi_gpu, actnorm,
+#                optimizer_checkpoint, start_step, eta_min, _log):
+def train_flow(flow, train_dataset, val_dataset, dataset_dims, device, config):
+    batch_size = config.batch_size
+    num_steps = config.num_steps
+    learning_rate = config.learning_rate
+    cosine_annealing = config.cosine_annealing
+    warmup_fraction = config.warmup_fraction
+    temperatures = config.temperatures
+    num_bits = config.num_bits
+    num_workers = config.num_workers
+    intervals = config.intervals
+    multi_gpu = config.multi_gpu
+    actnorm = config.actnorm
+    optimizer_checkpoint = config.optimizer_checkpoint
+    start_step = config.start_step
+    eta_min = config.eta_min
+
+    # run_dir = fso.dir
 
     flow = flow.to(device)
 
-    summary_writer = SummaryWriter(run_dir, max_queue=100)
+    # summary_writer = SummaryWriter(run_dir, max_queue=100)
+    summary_writer = tf.summary.create_file_writer(run_dir, max_queue=100)
+    summary_writer.set_as_default()
 
     train_loader = DataLoader(dataset=train_dataset,
                               batch_size=batch_size,
@@ -331,7 +372,7 @@ def train_flow(flow, train_dataset, val_dataset, dataset_dims, device,
 
     if optimizer_checkpoint is not None:
         optimizer.load_state_dict(torch.load(optimizer_checkpoint))
-        _log.info('Optimizer state loaded from {}'.format(optimizer_checkpoint))
+        # _log.info('Optimizer state loaded from {}'.format(optimizer_checkpoint))
 
     if cosine_annealing:
         if warmup_fraction == 0.:
@@ -356,7 +397,7 @@ def train_flow(flow, train_dataset, val_dataset, dataset_dims, device,
         c, h, w = dataset_dims
         return autils.nats_to_bits_per_dim(x, c, h, w)
 
-    _log.info('Starting training...')
+    # _log.info('Starting training...')
 
     best_val_log_prob = None
     start_time = None
@@ -395,19 +436,23 @@ def train_flow(flow, train_dataset, val_dataset, dataset_dims, device,
 
         if scheduler is not None:
             scheduler.step()
-            summary_writer.add_scalar('learning_rate', scheduler.get_lr()[0], step)
+            tf.summary.scalar('learning_rate', scheduler.get_lr()[0], step)
+            # summary_writer.add_scalar('learning_rate', scheduler.get_lr()[0], step)
 
-        summary_writer.add_scalar('loss', loss.item(), step)
+        # summary_writer.add_scalar('loss', loss.item(), step)
+        tf.summary.scalar('loss', loss.item(), step)
 
         if best_val_log_prob:
-            summary_writer.add_scalar('best_val_log_prob', best_val_log_prob, step)
+            tf.summary.scalar('best_val_log_prob', best_val_log_prob, step)
+            # summary_writer.add_scalar('best_val_log_prob', best_val_log_prob, step)
 
         flow.eval() # Everything beyond this point is evaluation.
 
         if step % intervals['log'] == 0:
             elapsed_time = time.time() - start_time
             progress = autils.progress_string(elapsed_time, step, num_steps)
-            _log.info("It: {}/{} loss: {:.3f} [{}]".format(step, num_steps, loss, progress))
+            # _log.info("It: {}/{} loss: {:.3f} [{}]".format(step, num_steps, loss, progress))
+            print(("It: {}/{} loss: {:.3f} [{}]".format(step, num_steps, loss, progress)))
 
         if step % intervals['sample'] == 0:
             fig, axs = plt.subplots(1, len(temperatures), figsize=(4 * len(temperatures), 4))
@@ -421,7 +466,7 @@ def train_flow(flow, train_dataset, val_dataset, dataset_dims, device,
 
                 ax.set_title('T={:.2f}'.format(temperature))
 
-            summary_writer.add_figure(tag='samples', figure=fig, global_step=step)
+            # summary_writer.add_figure(tag='samples', figure=fig, global_step=step)
 
             plt.close(fig)
 
@@ -438,20 +483,25 @@ def train_flow(flow, train_dataset, val_dataset, dataset_dims, device,
                                                    data_loader=val_loader)
             val_log_prob = nats_to_bits_per_dim(val_log_prob).item()
 
-            _log.info("It: {}/{} val_log_prob: {:.3f}".format(step, num_steps, val_log_prob))
-            summary_writer.add_scalar('val_log_prob', val_log_prob, step)
+            # _log.info("It: {}/{} val_log_prob: {:.3f}".format(step, num_steps, val_log_prob))
+            print("It: {}/{} val_log_prob: {:.3f}".format(step, num_steps, val_log_prob))
+            # summary_writer.add_scalar('val_log_prob', val_log_prob, step)
+            tf.summary.scalar('val_log_prob', val_log_prob, step)
 
             if best_val_log_prob is None or val_log_prob > best_val_log_prob:
                 best_val_log_prob = val_log_prob
 
                 torch.save(flow.state_dict(), os.path.join(run_dir, 'flow_best.pt'))
-                _log.info('It: {}/{} best val_log_prob improved, saved flow_best.pt'
+                # _log.info('It: {}/{} best val_log_prob improved, saved flow_best.pt'
+                #           .format(step, num_steps))
+                print('It: {}/{} best val_log_prob improved, saved flow_best.pt'
                           .format(step, num_steps))
 
         if step > 0 and (step % intervals['save'] == 0 or step == (num_steps - 1)):
             torch.save(optimizer.state_dict(), os.path.join(run_dir, 'optimizer_last.pt'))
             torch.save(flow.state_dict(), os.path.join(run_dir, 'flow_last.pt'))
-            _log.info('It: {}/{} saved optimizer_last.pt and flow_last.pt'.format(step, num_steps))
+            # _log.info('It: {}/{} saved optimizer_last.pt and flow_last.pt'.format(step, num_steps))
+            print('It: {}/{} saved optimizer_last.pt and flow_last.pt'.format(step, num_steps))
 
         if step > 0 and step % intervals['reconstruct'] == 0:
             with torch.no_grad():
@@ -469,210 +519,243 @@ def train_flow(flow, train_dataset, val_dataset, dataset_dims, device,
             # summary_writer.add_figure(tag='reconstr', figure=fig, global_step=step)
             # plt.close(fig)
 
-            summary_writer.add_scalar(tag='max_reconstr_abs_diff',
-                                      scalar_value=max_abs_diff.item(),
-                                      global_step=step)
-            summary_writer.add_scalar(tag='max_reconstr_logabsdet',
-                                      scalar_value=max_logabsdet.item(),
-                                      global_step=step)
+            # summary_writer.add_scalar(tag='max_reconstr_abs_diff',
+            #                           scalar_value=max_abs_diff.item(),
+            #                           global_step=step)
+            # summary_writer.add_scalar(tag='max_reconstr_logabsdet',
+            #                           scalar_value=max_logabsdet.item(),
+            #                           global_step=step)
 
-@ex.capture
-def set_device(use_gpu, multi_gpu, _log):
+            tf.summary.scalar('max_reconstr_abs_diff',max_abs_diff.item(),step=step)
+
+            tf.summary.scalar('max_reconstr_logabsdet',max_logabsdet.item(),step)
+
+# @ex.capture
+def set_device(config):
     # Decide which device to use.
-    if use_gpu and not torch.cuda.is_available():
+    if config.use_gpu and not torch.cuda.is_available():
         raise RuntimeError('use_gpu is True but CUDA is not available')
 
-    if use_gpu:
+    if config.use_gpu:
         device = torch.device('cuda')
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
     else:
         device = torch.device('cpu')
 
-    if multi_gpu and torch.cuda.device_count() == 1:
+    if config.multi_gpu and torch.cuda.device_count() == 1:
         raise RuntimeError('Multiple GPU training requested, but only one GPU is available.')
 
-    if multi_gpu:
-        _log.info('Using all {} GPUs available'.format(torch.cuda.device_count()))
+    # if config.multi_gpu:
+    #     _log.info('Using all {} GPUs available'.format(torch.cuda.device_count()))
 
     return device
 
-@ex.capture
-def get_train_valid_data(dataset, num_bits, valid_frac):
-    return get_data(dataset, num_bits, train=True, valid_frac=valid_frac)
+# @ex.capture
+# def get_train_valid_data(dataset, num_bits, valid_frac):
+def get_train_valid_data(config):
+    dataset = config.dataset
+    num_bits = config.num_bits
+    valid_frac = config.valid_frac
+    return get_data(dataset, num_bits, train=True, valid_frac=valid_frac, pad = config.pad)
 
-@ex.capture
+# @ex.capture
 def get_test_data(dataset, num_bits):
     return get_data(dataset, num_bits, train=False)
 
-@ex.command
-def sample_for_paper(seed):
-    run_dir = fso.dir
+# @ex.command
+# def sample_for_paper(seed):
+#     # run_dir = fso.dir
+#
+#     sample(output_path=os.path.join(run_dir, 'samples_small.png'),
+#            num_samples=30,
+#            samples_per_row=10)
+#
+#     sample(output_path=os.path.join(run_dir, 'samples_big.png'),
+#            num_samples=100,
+#            samples_per_row=10,
+#            seed=seed + 1)
 
-    sample(output_path=os.path.join(run_dir, 'samples_small.png'),
-           num_samples=30,
-           samples_per_row=10)
+# @ex.command(unobserved=True)
+# def eval_on_test(batch_size, num_workers, seed, _log):
+#     torch.manual_seed(seed)
+#     np.random.seed(seed)
+#
+#     device = set_device()
+#     test_dataset, (c, h, w) = get_test_data()
+#     _log.info('Test dataset size: {}'.format(len(test_dataset)))
+#     _log.info('Image dimensions: {}x{}x{}'.format(c, h, w))
+#
+#     flow = create_flow(c, h, w).to(device)
+#
+#     flow.eval()
+#
+#     def log_prob_fn(batch):
+#         return flow.log_prob(batch.to(device))
+#
+#     test_loader=DataLoader(dataset=test_dataset,
+#                            batch_size=batch_size,
+#                            num_workers=num_workers)
+#     test_loader = tqdm(test_loader)
+#
+#     mean, err = autils.eval_log_density_2(log_prob_fn=log_prob_fn,
+#                                           data_loader=test_loader,
+#                                           c=c, h=h, w=w)
+#     print('Test log probability (bits/dim): {:.2f} +/- {:.4f}'.format(mean, err))
 
-    sample(output_path=os.path.join(run_dir, 'samples_big.png'),
-           num_samples=100,
-           samples_per_row=10,
-           seed=seed + 1)
+# @ex.command(unobserved=True)
+# def sample(seed, num_bits, num_samples, samples_per_row, _log, output_path=None):
+# def sample(output_path=None):
+#
+#     torch.set_grad_enabled(False)
+#
+#     if output_path is None:
+#         output_path = 'samples.png'
+#
+#     torch.manual_seed(config.seed)
+#     np.random.seed(config.seed)
+#
+#     device = set_device(config)
+#
+#     _, _, (c, h, w) = get_train_valid_data()
+#
+#     flow = create_flow(c, h, w).to(device)
+#     flow.eval()
+#
+#     preprocess = Preprocess(config.num_bits)
+#
+#     samples = flow.sample(config.num_samples)
+#     samples = preprocess.inverse(samples)
+#
+#     save_image(samples.cpu(), output_path,
+#                nrow=config.samples_per_row,
+#                padding=0)
 
-@ex.command(unobserved=True)
-def eval_on_test(batch_size, num_workers, seed, _log):
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-
-    device = set_device()
-    test_dataset, (c, h, w) = get_test_data()
-    _log.info('Test dataset size: {}'.format(len(test_dataset)))
-    _log.info('Image dimensions: {}x{}x{}'.format(c, h, w))
-
-    flow = create_flow(c, h, w).to(device)
-
-    flow.eval()
-
-    def log_prob_fn(batch):
-        return flow.log_prob(batch.to(device))
-
-    test_loader=DataLoader(dataset=test_dataset,
-                           batch_size=batch_size,
-                           num_workers=num_workers)
-    test_loader = tqdm(test_loader)
-
-    mean, err = autils.eval_log_density_2(log_prob_fn=log_prob_fn,
-                                          data_loader=test_loader,
-                                          c=c, h=h, w=w)
-    print('Test log probability (bits/dim): {:.2f} +/- {:.4f}'.format(mean, err))
-
-@ex.command(unobserved=True)
-def sample(seed, num_bits, num_samples, samples_per_row, _log, output_path=None):
-    torch.set_grad_enabled(False)
-
-    if output_path is None:
-        output_path = 'samples.png'
-
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-
-    device = set_device()
-
-    _, _, (c, h, w) = get_train_valid_data()
-
-    flow = create_flow(c, h, w).to(device)
-    flow.eval()
-
-    preprocess = Preprocess(num_bits)
-
-    samples = flow.sample(num_samples)
-    samples = preprocess.inverse(samples)
-
-    save_image(samples.cpu(), output_path,
-               nrow=samples_per_row,
-               padding=0)
-
-@ex.command(unobserved=True)
+# @ex.command(unobserved=True)
 def num_params(_log):
     _, _, (c, h, w) = get_train_valid_data()
     # c, h, w = 3, 256, 256
     create_flow(c, h, w)
 
-@ex.command(unobserved=True)
-def eval_reconstruct(num_bits, batch_size, seed, num_reconstruct_batches, _log, output_path=''):
-    torch.set_grad_enabled(False)
+# @ex.command(unobserved=True)
+# def eval_reconstruct(num_bits, batch_size, seed, num_reconstruct_batches, _log, output_path=''):
+# def eval_reconstruct(num_bits, batch_size, seed, num_reconstruct_batches, _log, output_path=''):
+#
+#     torch.set_grad_enabled(False)
+#
+#     device = set_device(config)
+#
+#     torch.manual_seed(config.seed)
+#     np.random.seed(config.seed)
+#
+#     train_dataset, _, (c, h, w) = get_train_valid_data()
+#
+#     flow = create_flow(c, h, w).to(device)
+#     flow.eval()
+#
+#     train_loader = DataLoader(
+#         dataset=train_dataset,
+#         batch_size=batch_size,
+#         shuffle=True
+#     )
+#
+#     identity_transform = transforms.CompositeTransform([
+#         flow._transform,
+#         transforms.InverseTransform(flow._transform)
+#     ])
+#
+#     first_batch = True
+#     abs_diff = []
+#     for batch,_ in tqdm(load_num_batches(train_loader, num_reconstruct_batches),
+#                         total=num_reconstruct_batches):
+#         batch = batch.to(device)
+#         batch_rec, _ = identity_transform(batch)
+#         abs_diff.append(torch.abs(batch_rec - batch))
+#
+#         if first_batch:
+#             batch = Preprocess(num_bits).inverse(batch[:36, ...])
+#             batch_rec = Preprocess(num_bits).inverse(batch_rec[:36, ...])
+#
+#             save_image(batch.cpu(), os.path.join(output_path, 'invertibility_orig.png'),
+#                        nrow=6,
+#                        padding=0)
+#
+#             save_image(batch_rec.cpu(), os.path.join(output_path, 'invertibility_rec.png'),
+#                        nrow=6,
+#                        padding=0)
+#
+#             first_batch = False
+#
+#     abs_diff = torch.cat(abs_diff)
+#
+#     print('max abs diff: {:.4f}'.format(torch.max(abs_diff).item()))
 
-    device = set_device()
 
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-
-    train_dataset, _, (c, h, w) = get_train_valid_data()
-
-    flow = create_flow(c, h, w).to(device)
-    flow.eval()
-
-    train_loader = DataLoader(
-        dataset=train_dataset,
-        batch_size=batch_size,
-        shuffle=True
-    )
-
-    identity_transform = transforms.CompositeTransform([
-        flow._transform,
-        transforms.InverseTransform(flow._transform)
-    ])
-
-    first_batch = True
-    abs_diff = []
-    for batch,_ in tqdm(load_num_batches(train_loader, num_reconstruct_batches),
-                        total=num_reconstruct_batches):
-        batch = batch.to(device)
-        batch_rec, _ = identity_transform(batch)
-        abs_diff.append(torch.abs(batch_rec - batch))
-
-        if first_batch:
-            batch = Preprocess(num_bits).inverse(batch[:36, ...])
-            batch_rec = Preprocess(num_bits).inverse(batch_rec[:36, ...])
-
-            save_image(batch.cpu(), os.path.join(output_path, 'invertibility_orig.png'),
-                       nrow=6,
-                       padding=0)
-
-            save_image(batch_rec.cpu(), os.path.join(output_path, 'invertibility_rec.png'),
-                       nrow=6,
-                       padding=0)
-
-            first_batch = False
-
-    abs_diff = torch.cat(abs_diff)
-
-    print('max abs diff: {:.4f}'.format(torch.max(abs_diff).item()))
-
-
-@ex.command(unobserved=True)
-def profile(batch_size, num_workers):
+# @ex.command(unobserved=True)
+# def profile(batch_size, num_workers):
+def profile():
     train_dataset, _, _ = get_train_valid_data()
 
     train_loader = DataLoader(dataset=train_dataset,
-                              batch_size=batch_size,
-                              num_workers=num_workers)
+                              batch_size=config.batch_size,
+                              num_workers=config.num_workers)
     for _ in tqdm(load_num_batches(train_loader, 1000),
                   total=1000):
         pass
 
-@ex.command(unobserved=True)
-def plot_data(num_bits, num_samples, samples_per_row, seed):
-    torch.manual_seed(seed)
-    np.random.seed(seed)
+# @ex.command(unobserved=True)
+# def plot_data(num_bits, num_samples, samples_per_row, seed):
+def plot_data():
+    torch.manual_seed(config.seed)
+    np.random.seed(config.seed)
 
     train_dataset, _, _ = get_train_valid_data()
 
     samples = torch.cat([train_dataset[i][0] for i in np.random.randint(0, len(train_dataset),
-                                                                        num_samples)])
-    samples = Preprocess(num_bits).inverse(samples)
+                                                                        config.num_samples)])
+    samples = Preprocess(config.num_bits).inverse(samples)
 
     save_image(samples.cpu(),
                'samples.png',
-               nrow=samples_per_row,
+               nrow=config.samples_per_row,
                padding=0)
 
-@ex.automain
+# @ex.automain
 def main(seed, _log):
-    torch.manual_seed(seed)
-    np.random.seed(seed)
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
 
-    device = set_device()
+    # seed = 0
+    torch.manual_seed(config.seed)
+    np.random.seed(config.seed)
 
-    train_dataset, val_dataset, (c, h, w) = get_train_valid_data()
+    torch.cuda.set_device(0)
+    device = set_device(config)
 
-    _log.info('Training dataset size: {}'.format(len(train_dataset)))
+    torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
+    train_dataset, val_dataset, (c, h, w) = get_train_valid_data(config)
+
+    # _log.info('Training dataset size: {}'.format(len(train_dataset)))
+    print('Training dataset size: {}'.format(len(train_dataset)))
     if val_dataset is None:
-        _log.info('No validation dataset')
+        # _log.info('No validation dataset')
+        print('No validation dataset')
     else:
-        _log.info('Validation dataset size: {}'.format(len(val_dataset)))
+        # _log.info('Validation dataset size: {}'.format(len(val_dataset)))
+        print('Validation dataset size: {}'.format(len(val_dataset)))
 
-    _log.info('Image dimensions: {}x{}x{}'.format(c, h, w))
+    # _log.info('Image dimensions: {}x{}x{}'.format(c, h, w))
+    print('Image dimensions: {}x{}x{}'.format(c, h, w))
+    flow = create_flow(c, h, w, config)
 
-    flow = create_flow(c, h, w)
-
-    train_flow(flow, train_dataset, val_dataset, (c, h, w), device)
+    train_flow(flow, train_dataset, val_dataset, (c, h, w), device, config)

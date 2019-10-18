@@ -53,7 +53,7 @@ class RandomHorizontalFlipTensor(object):
 def dataset_root(dataset_name):
     return os.path.join(autils.get_dataset_root(), dataset_name)
 
-def get_data(dataset, num_bits, train=True, valid_frac=None):
+def get_data(dataset, num_bits, train=True, valid_frac=None, pad=None):
     train_dataset = None
     valid_dataset = None
     test_dataset = None
@@ -87,7 +87,8 @@ def get_data(dataset, num_bits, train=True, valid_frac=None):
             )
 
     elif dataset == 'cifar-10-fast' or dataset == 'cifar-10':
-        root = dataset_root('cifar-10')
+        # root = dataset_root('cifar-10')
+        root=''
         c, h, w = (3, 32, 32)
 
         if dataset == 'cifar-10-fast':
@@ -113,7 +114,7 @@ def get_data(dataset, num_bits, train=True, valid_frac=None):
             train_dataset = dataset_class(
                 root=root,
                 train=True,
-                download=True,
+                download=False,
                 transform=train_transform
             )
 
@@ -134,7 +135,7 @@ def get_data(dataset, num_bits, train=True, valid_frac=None):
             test_dataset = dataset_class(
                 root=root,
                 train=False,
-                download=True,
+                download=False,
                 transform=test_transform
             )
     elif dataset == 'imagenet-32' or dataset == 'imagenet-64':
@@ -212,17 +213,17 @@ def get_data(dataset, num_bits, train=True, valid_frac=None):
                 transform=test_transform
             )
 
-    # if dataset_name == 'fashion-mnist' or dataset_name == 'mnist':
+    # elif dataset == 'fashion-mnist' or dataset == 'mnist':
     #     base_transforms = [
     #         tvt.Pad((pad, pad)),
     #         tvt.ToTensor()
     #     ]
     #
-    #     root = dataset_root(dataset_name)
+    #     root = dataset_root(dataset)
     #
     #     c, h, w = (1, 28 + 2 * pad, 28 + 2 * pad)
     #
-    #     if dataset_name == 'fashion-mnist':
+    #     if dataset == 'fashion-mnist':
     #         dataset_cls = datasets.FashionMNIST
     #         base_transforms.insert(0, tvt.RandomHorizontalFlip())
     #     else:
@@ -237,6 +238,29 @@ def get_data(dataset, num_bits, train=True, valid_frac=None):
     #         download=True
     #     )
     #
+    #     train_dataset = dataset_class(
+    #         root=root,
+    #         train=True,
+    #         download=True,
+    #         transform=tvt.Compose(
+    #             base_transforms + [Preprocess(num_bits)]
+    #         )
+    #     )
+    #
+    #     valid_dataset = dataset_class(
+    #         root=root,
+    #         train=True,
+    #         transform=test_transform  # Note different transform.
+    #     )
+
+        num_train = len(train_dataset)
+        indices = torch.randperm(num_train).tolist()
+        valid_size = int(np.floor(valid_frac * num_train))
+        train_idx, valid_idx = indices[valid_size:], indices[:valid_size]
+
+        train_dataset = Subset(train_dataset, train_idx)
+        valid_dataset = Subset(valid_dataset, valid_idx)
+
     # elif dataset_name == 'celeba-64':
     #     if not train:
     #         raise RuntimeError('No test set for CelebA.')
@@ -271,7 +295,7 @@ def get_data(dataset, num_bits, train=True, valid_frac=None):
     #         ]),
     #         download=True
     #     )
-    #
+
 
     else:
         raise RuntimeError('Unknown dataset')

@@ -4,7 +4,7 @@ import re
 import time
 
 import torch
-from sacred import observers
+# from sacred import observers
 from torch import nn
 from torch.utils import checkpoint
 
@@ -13,32 +13,32 @@ from nde import transforms
 from utils import NoDataRootError
 
 
-class NamingObserver(observers.RunObserver):
-    def __init__(self, basedir, priority):
-        self.basedir = basedir
-        self.priority = priority
-
-    def started_event(self, ex_info, command, host_info, start_time, config, meta_info, _id):
-        prefix = config['dataset']
-
-        if config['run_descr']:
-            prefix += '-' + config['run_descr']
-
-        def existing_run_nrs():
-            pattern = '{}(-\d+)?'.format(prefix)
-            run_dirs = (d for d in os.listdir(self.basedir)
-                        if os.path.isdir(os.path.join(self.basedir, d)))
-            for run_dir in run_dirs:
-                match = re.fullmatch(pattern, run_dir)
-                if match:
-                    num_str = match.group(1)
-                    yield int(num_str[1:] if num_str else 0)
-
-        max_nr = max(existing_run_nrs(), default=None)
-        if max_nr is None:
-            return prefix
-        else:
-            return prefix + '-{}'.format(max_nr + 1)
+# class NamingObserver(observers.RunObserver):
+#     def __init__(self, basedir, priority):
+#         self.basedir = basedir
+#         self.priority = priority
+#
+#     def started_event(self, ex_info, command, host_info, start_time, config, meta_info, _id):
+#         prefix = config['dataset']
+#
+#         if config['run_descr']:
+#             prefix += '-' + config['run_descr']
+#
+#         def existing_run_nrs():
+#             pattern = '{}(-\d+)?'.format(prefix)
+#             run_dirs = (d for d in os.listdir(self.basedir)
+#                         if os.path.isdir(os.path.join(self.basedir, d)))
+#             for run_dir in run_dirs:
+#                 match = re.fullmatch(pattern, run_dir)
+#                 if match:
+#                     num_str = match.group(1)
+#                     yield int(num_str[1:] if num_str else 0)
+#
+#         max_nr = max(existing_run_nrs(), default=None)
+#         if max_nr is None:
+#             return prefix
+#         else:
+#             return prefix + '-{}'.format(max_nr + 1)
 
 def imshow(image, ax):
     image = utils.tensor2numpy(image.permute(1,2,0))

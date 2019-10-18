@@ -3,8 +3,9 @@ import json
 import numpy as np
 import torch
 import os
+import tensorflow as tf
 
-from tensorboardX import SummaryWriter
+# from tensorboardX import SummaryWriter
 from time import sleep
 from torch import optim
 from torch.nn import functional as F
@@ -19,6 +20,8 @@ import utils
 from experiments import cutils
 from nde import distributions, flows, transforms
 
+
+SummaryWriter = tf.summary.SummaryWriter
 parser = argparse.ArgumentParser()
 
 # data
