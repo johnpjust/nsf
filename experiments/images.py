@@ -27,13 +27,14 @@ import utils
 import optim
 import nn as nn_
 
+import datetime
+
 import matplotlib.pyplot as plt
 
 # Capture job id on the cluster
 # sacred.SETTINGS.HOST_INFO.CAPTURED_ENV.append('SLURM_JOB_ID')
 
 # runs_dir = os.path.join(r'C:\Users\justjo\PycharmProjects\nsf', 'runs/images')
-run_dir = os.path.join(r'C:\Users\justjo\PycharmProjects\nsf', 'runs/images')
 
 # ex = Experiment('decomposition-flows-images')
 
@@ -52,7 +53,7 @@ class config():
     # Dataset
     dataset = 'cifar-10' # 'fashion-mnist'
     num_workers = 0
-    valid_frac = 0.01
+    valid_frac = 0.1
 
     # Pre-processing
     preprocessing = 'glow'
@@ -85,9 +86,9 @@ class config():
     dropout_prob = 0.
 
     # Optimization
-    batch_size = 10
+    batch_size = 100
     learning_rate = 5e-4
-    cosine_annealing = True
+    cosine_annealing = False
     eta_min=0.
     warmup_fraction = 0.
     num_steps = 100000
@@ -114,6 +115,13 @@ class config():
     samples_per_row = 8
     num_reconstruct_batches = 10
     seed = 0
+
+path = os.path.join('checkpoint', '{}_steps{}_levels{}_h{}_multi{}_BN{}_resBlocks{}_useRes{}_{}'.format(
+    config.dataset + ('_' if config.preprocessing != '' else ''),
+    config.steps_per_level, config.levels, config.hidden_channels, int(config.multi_scale), int(config.resnet_batchnorm), config.num_res_blocks,
+    int(config.use_resnet),
+    str(datetime.datetime.now())[:-7].replace(' ', '-').replace(':', '-')))
+run_dir = os.path.join(r'C:\Users\justjo\PycharmProjects\nsf', path)
 
 class ConvNet(nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels):
@@ -429,7 +437,8 @@ def train_flow(flow, train_dataset, val_dataset, dataset_dims, device, config):
         else:
             log_density = flow.log_prob(batch)
 
-        loss = -nats_to_bits_per_dim(torch.mean(log_density))
+        # loss = -nats_to_bits_per_dim(torch.mean(log_density))
+        loss = -torch.mean(log_density)
 
         loss.backward()
         optimizer.step()
@@ -481,7 +490,7 @@ def train_flow(flow, train_dataset, val_dataset, dataset_dims, device, config):
 
             val_log_prob = autils.eval_log_density(log_prob_fn=log_prob_fn,
                                                    data_loader=val_loader)
-            val_log_prob = nats_to_bits_per_dim(val_log_prob).item()
+            # val_log_prob = nats_to_bits_per_dim(val_log_prob).item()
 
             # _log.info("It: {}/{} val_log_prob: {:.3f}".format(step, num_steps, val_log_prob))
             print("It: {}/{} val_log_prob: {:.3f}".format(step, num_steps, val_log_prob))
