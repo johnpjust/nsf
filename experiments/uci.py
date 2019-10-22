@@ -33,7 +33,7 @@ args = parser_()
 # parser.add_argument('--dataset_name', type=str, default='miniboone',
 #                     choices=['power', 'gas', 'hepmass', 'miniboone', 'bsds300'],
 #                     help='Name of dataset to use.')
-args.dataset_name = 'fmnist'
+args.dataset_name = 'cifar10'
 # parser.add_argument('--train_batch_size', type=int, default=64,
 #                     help='Size of batch used for training.')
 args.train_batch_size = 64
@@ -43,7 +43,7 @@ args.val_frac = 0.2
 
 # parser.add_argument('--val_batch_size', type=int, default=512,
 #                     help='Size of batch used for validation.')
-args.val_batch_size=64
+args.val_batch_size=128
 # optimization
 # parser.add_argument('--learning_rate', type=float, default=3e-4,
 #                     help='Learning rate for optimizer.')
@@ -99,13 +99,15 @@ args.apply_unconditional_transform = 1
 # logging and checkpoints
 # parser.add_argument('--monitor_interval', type=int, default=250,
 #                     help='Interval in steps at which to report training stats.')
-args.monitor_interval = 250
+args.monitor_interval = 25#0
 # reproducibility
 # parser.add_argument('--seed', type=int, default=1638128,
 #                     help='Random seed for PyTorch and NumPy.')
 args.seed = 1638128
 # args = parser.parse_args()
 args.activation = F.tanh
+args.stop_cntr = 15
+args.step_lim = 5000 ## num of steps after which to record best model
 
 timestamp = str(datetime.datetime.now())[:-7].replace(' ', '-').replace(':', '-')
 path = os.path.join('checkpoint', '{}_steps{}_baseXfm{}_linXfm{}_h{}_BN{}_Blocks{}_UconXfm{}_{}'.format(
@@ -156,39 +158,42 @@ torch.set_default_tensor_type('torch.cuda.FloatTensor')
 #     drop_last=False
 # )
 ############## MNIST ####################
-def read_idx(filename):
-    with open(filename, 'rb') as f:
-        zero, data_type, dims = struct.unpack('>HBB', f.read(4))
-        shape = tuple(struct.unpack('>I', f.read(4))[0] for d in range(dims))
-        return np.fromstring(f.read(), dtype=np.uint8).reshape(shape)
-
-dtrain = read_idx(r'C:\Users\justjo\Downloads\public_datasets/FasionMNIST/train-images-idx3-ubyte')
-dtrain = dtrain.reshape((dtrain.shape[0],-1))/128. - 1.
-train_idx = np.arange(dtrain.shape[0])
-np.random.shuffle(train_idx)
-
-dtest = read_idx(r'C:\Users\justjo\Downloads\public_datasets/FasionMNIST/t10k-images-idx3-ubyte')
-dtest = dtest.reshape((dtest.shape[0],-1))/128. - 1.
-
-fnames_data = [r'C:\Users\justjo\Downloads\public_datasets/MNIST/train-images.idx3-ubyte', r'C:\Users\justjo\Downloads\public_datasets/MNIST/t10k-images.idx3-ubyte']
-cont_data = []
-for f in fnames_data:
-    cont_data.append(read_idx(f))
-cont_data = np.concatenate(cont_data)
-cont_data = cont_data.reshape((cont_data.shape[0],-1))/128. - 1.
-########### CIFAR10 ###############################
-# fnames_cifar = glob.glob(r'C:\Users\justjo\Downloads\public_datasets\cifar-10-python\cifar-10-batches-py\train\*')
-# dtrain=[np.load(f, allow_pickle=True, encoding='latin1') for f in fnames_cifar]
-# dtrain = np.concatenate([a['data'] for a in dtrain])/128. - 1.
+# def read_idx(filename):
+#     with open(filename, 'rb') as f:
+#         zero, data_type, dims = struct.unpack('>HBB', f.read(4))
+#         shape = tuple(struct.unpack('>I', f.read(4))[0] for d in range(dims))
+#         return np.fromstring(f.read(), dtype=np.uint8).reshape(shape)
+#
+# dtrain = read_idx(r'C:\Users\justjo\Downloads\public_datasets/FasionMNIST/train-images-idx3-ubyte')
+# dtrain = dtrain.reshape((dtrain.shape[0],-1))/128. - 1.
 # train_idx = np.arange(dtrain.shape[0])
 # np.random.shuffle(train_idx)
 #
-# dtest = np.load(r'C:\Users\justjo\Downloads\public_datasets\cifar-10-python\cifar-10-batches-py\test\test_batch', allow_pickle=True, encoding='latin1')
-# dtest = dtest['data']/128. - 1.
+# dtest = read_idx(r'C:\Users\justjo\Downloads\public_datasets/FasionMNIST/t10k-images-idx3-ubyte')
+# dtest = dtest.reshape((dtest.shape[0],-1))/128. - 1.
 #
-# cont_data = scipy.io.loadmat(r'C:\Users\justjo\Downloads\public_datasets\SVHN.mat')
-# cont_data = np.moveaxis(cont_data['X'],3,0)
-# cont_data = np.reshape(cont_data, (cont_data.shape[0],-1))/128. - 1.
+# # fnames_data = [r'C:\Users\justjo\Downloads\public_datasets/MNIST/train-images.idx3-ubyte', r'C:\Users\justjo\Downloads\public_datasets/MNIST/t10k-images.idx3-ubyte']
+# # cont_data = []
+# # for f in fnames_data:
+# #     cont_data.append(read_idx(f))
+# # cont_data = np.concatenate(cont_data)
+# cont_data = read_idx(r'C:\Users\justjo\Downloads\public_datasets/MNIST/t10k-images.idx3-ubyte')
+# cont_data = cont_data.reshape((cont_data.shape[0],-1))/128. - 1.
+# # cont_data = cont_data[np.random.choice(cont_data.shape[0],10000, False), :]
+########### CIFAR10 ###############################
+fnames_cifar = glob.glob(r'C:\Users\justjo\Downloads\public_datasets\cifar-10-python\cifar-10-batches-py\train\*')
+dtrain=[np.load(f, allow_pickle=True, encoding='latin1') for f in fnames_cifar]
+dtrain = np.concatenate([a['data'] for a in dtrain])/128. - 1.
+train_idx = np.arange(dtrain.shape[0])
+np.random.shuffle(train_idx)
+
+dtest = np.load(r'C:\Users\justjo\Downloads\public_datasets\cifar-10-python\cifar-10-batches-py\test\test_batch', allow_pickle=True, encoding='latin1')
+dtest = dtest['data']/128. - 1.
+
+cont_data = scipy.io.loadmat(r'C:\Users\justjo\Downloads\public_datasets\SVHN.mat')
+cont_data = np.moveaxis(cont_data['X'],3,0)
+cont_data = np.reshape(cont_data, (cont_data.shape[0],-1))/128. - 1.
+# cont_data = cont_data[np.random.choice(cont_data.shape[0],10000, False), :]
 #################################################
 
 train_dataset = torch.utils.data.TensorDataset(
@@ -212,6 +217,7 @@ val_loader = data.DataLoader(
     shuffle=True,
     drop_last=True
 )
+val_generator = data_.batch_generator(val_loader)
 
 test_dataset = torch.utils.data.TensorDataset(
     torch.from_numpy(dtest).float())
@@ -222,6 +228,18 @@ test_loader = data.DataLoader(
     shuffle=False,
     drop_last=False
 )
+test_generator = data_.batch_generator(test_loader)
+
+cont_dataset = torch.utils.data.TensorDataset(
+    torch.from_numpy(cont_data).float())
+# test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.val_batch_size, shuffle=False)
+cont_loader = data.DataLoader(
+    dataset=cont_dataset,
+    batch_size=args.val_batch_size,
+    shuffle=False,
+    drop_last=False
+)
+cont_generator = data_.batch_generator(cont_loader)
 
 features = test_batch.shape[1]
 # features = train_dataset.dim
@@ -388,6 +406,7 @@ with open(os.path.join(run_dir, 'args.json'), 'w') as f:
 tbar = tqdm(range(args.num_training_steps))
 best_val_score = -1e10
 torch.cuda.empty_cache()
+stop_cntr = 0
 for step in tbar:
     flow.train()
     if args.anneal_learning_rate:
@@ -404,21 +423,72 @@ for step in tbar:
 
     tf.summary.scalar(name='loss', data=loss.item(), step=step)
 
-    if (step + 1) % args.monitor_interval == 0:
-        flow.eval()
+    ## option #1 for val monitoring
+    flow.eval()
+    with torch.no_grad():
+        val_batch = next(val_generator)[0].to(device)
+        log_density_val = flow.log_prob(val_batch[0].to(device).detach())
+        mean_log_density_val = torch.mean(log_density_val).detach()
+        running_val_log_density = mean_log_density_val.cpu().numpy()
 
-        with torch.no_grad():
-            # compute validation score
-            running_val_log_density = 0
-            for val_batch in val_loader:
-                log_density_val = flow.log_prob(val_batch[0].to(device).detach())
-                mean_log_density_val = torch.mean(log_density_val).detach()
-                running_val_log_density += mean_log_density_val.cpu().numpy()
-            running_val_log_density /= len(val_loader)
+        test_batch = next(test_generator)[0].to(device)
+        log_density_test = flow.log_prob(test_batch[0].to(device).detach())
+        mean_log_density_test = torch.mean(log_density_test).detach()
+        running_test_log_density = mean_log_density_test.cpu().numpy()
 
-        ####### save best model  #### don't use if want to run faster...or wait until reaching a certain best score
-        if running_val_log_density > best_val_score:
-            best_val_score = running_val_log_density
+        cont_batch = next(cont_generator)[0].to(device)
+        log_density_cont = flow.log_prob(cont_batch[0].to(device).detach())
+        mean_log_density_cont = torch.mean(log_density_cont).detach()
+        running_cont_log_density = mean_log_density_cont.cpu().numpy()
+
+    if running_val_log_density > best_val_score:
+        best_val_score = running_val_log_density
+        stop_cntr = 0
+        if step > args.step_lim:
+            model_holder = flow.cpu().state_dict().copy()
+            flow.cuda().state_dict()
+    else:
+        stop_cntr += 1
+        if stop_cntr > args.stop_cntr:
+            break
+
+    # ## option #2 for val monitoring
+    # if (step + 1) % args.monitor_interval == 0:
+    #     flow.eval()
+    #
+    #     with torch.no_grad():
+    #         # compute validation score
+    #         running_val_log_density = 0
+    #         for val_batch in val_loader:
+    #             log_density_val = flow.log_prob(val_batch[0].to(device).detach())
+    #             mean_log_density_val = torch.mean(log_density_val).detach()
+    #             running_val_log_density += mean_log_density_val.cpu().numpy()
+    #         running_val_log_density /= len(val_loader)
+    #
+    #     ####### save best model  #### don't use if want to run faster...or wait until reaching a certain best score
+    #     if running_val_log_density > best_val_score:
+    #         best_val_score = running_val_log_density
+    #         stop_cntr = 0
+    #         if step > args.step_lim:
+    #             model_holder = flow.cpu().state_dict().copy()
+    #             flow.cuda().state_dict()
+    #         with torch.no_grad():
+    #             running_test_log_density = 0
+    #             for test_batch in test_loader:
+    #                 log_density_test = flow.log_prob(test_batch[0].to(device).detach())
+    #                 mean_log_density_test = torch.mean(log_density_test).detach()
+    #                 running_test_log_density += mean_log_density_test.cpu().numpy()
+    #             running_test_log_density /= len(test_loader)
+    #             running_cont_log_density = 0
+    #             for cont_batch in cont_loader:
+    #                 log_density_cont = flow.log_prob(cont_batch[0].to(device).detach())
+    #                 mean_log_density_cont = torch.mean(log_density_cont).detach()
+    #                 running_cont_log_density += mean_log_density_cont.cpu().numpy()
+    #             running_cont_log_density /= len(cont_loader)
+    #     else:
+    #         stop_cntr+= 1
+    #         if stop_cntr > args.stop_cntr:
+    #             break
         #     # path_ = os.path.join(cutils.get_checkpoint_root(),
         #     #                     '{}-best-val-{}.t'.format(args.dataset_name, timestamp))
         #     path_ = os.path.join(run_dir,
@@ -446,6 +516,8 @@ for step in tbar:
         summaries = {
             'val': running_val_log_density,
             'best-val': best_val_score,
+            'test': running_test_log_density,
+            'cont_data': running_cont_log_density
             # 'max-abs-relative-error': max_abs_relative_error,
             # 'average-abs-relative-error': average_abs_relative_error
         }
@@ -456,20 +528,31 @@ for step in tbar:
 ####### load best val model
 # path = os.path.join(cutils.get_checkpoint_root(),
 #                     '{}-best-val-{}.t'.format(args.dataset_name, timestamp))
+flow.load_state_dict(model_holder)
 path_ = os.path.join(run_dir,
                     '{}-best-val-{}.t'.format(args.dataset_name, timestamp))
-flow.load_state_dict(torch.load(path_))
-flow.eval()
-
+torch.save(model_holder, path_)
+# flow.load_state_dict(torch.load(path_))
+# flow.eval()
 # calculate log-likelihood on test set
 with torch.no_grad():
     log_likelihood = torch.Tensor([])
     for batch in tqdm(test_loader):
-        log_density = flow.log_prob(batch.to(device))
+        log_density = flow.log_prob(batch[0].to(device))
         log_likelihood = torch.cat([
             log_likelihood,
             log_density
         ])
+# calculate log-likelihood on contrastive set
+with torch.no_grad():
+    log_likelihood_cont = torch.Tensor([])
+    for batch in tqdm(cont_loader):
+        log_density = flow.log_prob(batch[0].to(device))
+        log_likelihood_cont = torch.cat([
+            log_likelihood_cont,
+            log_density
+        ])
+
 path_ = os.path.join(run_dir, '{}-{}-log-likelihood.npy'.format(
     args.dataset_name,
     args.base_transform_type
