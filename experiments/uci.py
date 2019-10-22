@@ -426,17 +426,17 @@ for step in tbar:
     ## option #1 for val monitoring
     flow.eval()
     with torch.no_grad():
-        val_batch = next(val_generator)[0].to(device)
+        val_batch = next(val_generator)
         log_density_val = flow.log_prob(val_batch[0].to(device).detach())
         mean_log_density_val = torch.mean(log_density_val).detach()
         running_val_log_density = mean_log_density_val.cpu().numpy()
 
-        test_batch = next(test_generator)[0].to(device)
+        test_batch = next(test_generator)
         log_density_test = flow.log_prob(test_batch[0].to(device).detach())
         mean_log_density_test = torch.mean(log_density_test).detach()
         running_test_log_density = mean_log_density_test.cpu().numpy()
 
-        cont_batch = next(cont_generator)[0].to(device)
+        cont_batch = next(cont_generator)
         log_density_cont = flow.log_prob(cont_batch[0].to(device).detach())
         mean_log_density_cont = torch.mean(log_density_cont).detach()
         running_cont_log_density = mean_log_density_cont.cpu().numpy()
